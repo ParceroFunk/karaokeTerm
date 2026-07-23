@@ -1,0 +1,8 @@
+github.com/emersion/go-mpris v0.0.0-20151025233139-933ae9a18397 h1:VoOA6yoZEQcM/1F+oG3ww+gDucoTV+5ILFao5Fd3C68=
+github.com/emersion/go-mpris v0.0.0-20151025233139-933ae9a18397/go.mod h1:Ko+tsIs8Eqr8vt8d7Fhvx5fTs6rZOxyMaWw1tZVqhng=
+github.com/godbus/dbus v4.1.0+incompatible h1:WqqLRTsQic3apZUK9qC5sGNfXthmPXzUZ7nQPrNITa4=
+github.com/godbus/dbus v4.1.0+incompatible/go.mod h1:/YcGZj5zSblfDWMMoOzV4fas9FZnQYTkDnsGvmh2Grw=
+github.com/godbus/dbus/v5 v5.2.2 h1:TUR3TgtSVDmjiXOgAAyaZbYmIeP3DPkld3jgKGV8mXQ=
+github.com/godbus/dbus/v5 v5.2.2/go.mod h1:3AAv2+hPq5rdnr5txxxRwiGjPXamgoIHgz9FPBfOp3c=
+golang.org/x/sys v0.27.0 h1:wBqf8DvsY9Y/2P8gAfPDEYNuS30J4lPHJxXSb/nJZ+s=
+golang.org/x/sys v0.27.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
