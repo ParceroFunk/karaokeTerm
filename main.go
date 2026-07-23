@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/ParceroFunk/karaokeTerm/lrc"
 	"github.com/ParceroFunk/karaokeTerm/lrclib"
 	"github.com/ParceroFunk/karaokeTerm/mpris"
 	"github.com/godbus/dbus/v5"
@@ -26,7 +27,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("dbus connection failed: %v", err)
 	}
-	fmt.Println(lyrics)
+	// fmt.Println(lyrics)
+
+	// Parse Lyrics to sync them
+	lyricsLines := lrc.LrcLyricsParser(lyrics)
+	fmt.Printf("Parsed lyrics: %v", lyricsLines)
 }
 
 func getPlayingMediaMetadata(conn *dbus.Conn) (title, artist, length string) {
