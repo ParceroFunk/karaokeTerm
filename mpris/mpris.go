@@ -105,6 +105,30 @@ func (m *MPRIS) GetTitle() (string, error) {
 	return str, nil
 }
 
+// GetArtist returns the currently playing track's artist.
+func (m *MPRIS) GetArtist() (string, error) {
+	v, err := m.getProperty("org.mpris.MediaPlayer2.Player.Metadata")
+	if err != nil {
+		return "", err
+	}
+
+	meta, ok := v.Value().(map[string]dbus.Variant)
+	if !ok {
+		return "", errors.New("unexpected type for Metadata")
+	}
+
+	artist, ok := meta["xesam:artist"]
+	if !ok {
+		return "", errors.New("no artist in metadata")
+	}
+	// xesam:artist is an array of strings (as)
+	arr, ok := artist.Value().([]string)
+	if !ok || len(arr) == 0 {
+		return "", errors.New("unexpected type for artist")
+	}
+	return arr[0], nil
+}
+
 // GetPosition returns playback position in microseconds.
 // Needed for syncing lyrics to timestamps.
 func (m *MPRIS) GetPosition() (int64, error) {
