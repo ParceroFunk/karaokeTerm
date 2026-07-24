@@ -1,13 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"strconv"
 
 	"github.com/ParceroFunk/karaokeTerm/lrc"
 	"github.com/ParceroFunk/karaokeTerm/lrclib"
 	"github.com/ParceroFunk/karaokeTerm/mpris"
+	"github.com/ParceroFunk/karaokeTerm/ui"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/godbus/dbus/v5"
 )
 
@@ -20,7 +21,8 @@ func main() {
 	defer conn.Close()
 
 	// Get metadata from mpris package
-	title, artist, duration := getPlayingMediaMetadata(conn)
+	player := mpris.NewMPRIS(conn)
+	title, artist, duration := getPlayingMediaMetadata(player)
 
 	// Get the Lyrics from lrclib package
 	lyrics, err := lrclib.GetLyrics(title, artist, duration)
@@ -31,12 +33,14 @@ func main() {
 
 	// Parse Lyrics to sync them
 	lyricsLines := lrc.LrcLyricsParser(lyrics)
-	fmt.Printf("Parsed lyrics: %v", lyricsLines)
+
+	p := tea.NewProgram(ui.NewModel(player, lyricsLines), tea.WithAltScreen())
+	if _, err := p.Run(); err != nil {
+		log.Fatalf("ui error: %v", err)
+	}
 }
 
-func getPlayingMediaMetadata(conn *dbus.Conn) (title, artist, length string) {
-	player := mpris.NewMPRIS(conn)
-
+func getPlayingMediaMetadata(player *mpris.MPRIS) (title, artist, length string) {
 	mediaTitle, err := player.GetTitle()
 	if err != nil {
 		log.Fatalf("could not get title: %v", err)
