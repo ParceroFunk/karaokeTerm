@@ -6,17 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
 )
 
-const DivFactorForLength = 1e6
+// DivFactorForLength converts mpris:length (microseconds) to seconds.
+const DivFactorForLength = 1_000_000
 
 type MPRIS struct {
 	conn       *dbus.Conn
-	PlayerName string // cached, avoids re-listing D-Bus names every call
+	playerName string // cached, avoids re-listing D-Bus names every call
 }
 
 func NewMPRIS(conn *dbus.Conn) *MPRIS {
@@ -36,20 +36,19 @@ func (m *MPRIS) findPlayer() (string, error) {
 			return n, nil
 		}
 	}
-
 	return "", errors.New("no MPRIS player found")
 }
 
 // ensurePlayer returns a cached player name, re-resolving if not set.
 func (m *MPRIS) ensurePlayer() (string, error) {
-	if m.PlayerName != "" {
-		return m.PlayerName, nil
+	if m.playerName != "" {
+		return m.playerName, nil
 	}
 	name, err := m.findPlayer()
 	if err != nil {
 		return "", err
 	}
-	m.PlayerName = name
+	m.playerName = name
 	return name, nil
 }
 
@@ -63,10 +62,68 @@ func (m *MPRIS) getProperty(name string) (dbus.Variant, error) {
 	val, err := obj.GetProperty(name)
 	if err != nil {
 		// Player likely closed/changed; drop cache so next call re-resolves.
-		m.PlayerName = ""
+		m.playerName = ""
 		return dbus.Variant{}, fmt.Errorf("failed to get property %s: %w", name, err)
 	}
 	return val, nil
+}
+
+// TrackMetadata bundles everything read from a single Metadata fetch,
+// avoiding redundant D-Bus round-trips for the same property.
+type TrackMetadata struct {
+	Title    string
+	Artist   string
+	Duration int64  // seconds
+	TrackID  string // mpris:trackid — unique per track, cheap to compare for change detection
+}
+
+// GetMetadata fetches org.mpris.MediaPlayer2.Player.Metadata once and
+// parses all fields from it, instead of one D-Bus call per field.
+func (m *MPRIS) GetMetadata() (TrackMetadata, error) {
+	v, err := m.getProperty("org.mpris.MediaPlayer2.Player.Metadata")
+	if err != nil {
+		return TrackMetadata{}, err
+	}
+
+	meta, ok := v.Value().(map[string]dbus.Variant)
+	if !ok {
+		return TrackMetadata{}, errors.New("unexpected type for Metadata")
+	}
+
+	md := TrackMetadata{}
+
+	if title, ok := meta["xesam:title"]; ok {
+		if str, ok := title.Value().(string); ok {
+			md.Title = str
+		}
+	}
+
+	if artist, ok := meta["xesam:artist"]; ok {
+		if arr, ok := artist.Value().([]string); ok && len(arr) > 0 {
+			md.Artist = arr[0]
+		}
+	}
+
+	if length, ok := meta["mpris:length"]; ok {
+		if us, ok := length.Value().(int64); ok {
+			md.Duration = us / DivFactorForLength
+		}
+	}
+
+	if trackID, ok := meta["mpris:trackid"]; ok {
+		switch t := trackID.Value().(type) {
+		case dbus.ObjectPath:
+			md.TrackID = string(t)
+		case string:
+			md.TrackID = t
+		}
+	}
+
+	if md.Title == "" {
+		return md, errors.New("no title in metadata")
+	}
+
+	return md, nil
 }
 
 // GetStatus returns the playback status (Playing, Paused, Stopped).
@@ -82,53 +139,6 @@ func (m *MPRIS) GetStatus() (string, error) {
 	return status, nil
 }
 
-// GetTitle returns the currently playing track title.
-func (m *MPRIS) GetTitle() (string, error) {
-	v, err := m.getProperty("org.mpris.MediaPlayer2.Player.Metadata")
-	if err != nil {
-		return "", err
-	}
-
-	meta, ok := v.Value().(map[string]dbus.Variant)
-	if !ok {
-		return "", errors.New("unexpected type for Metadata")
-	}
-
-	title, ok := meta["xesam:title"]
-	if !ok {
-		return "", errors.New("no title in metadata")
-	}
-	str, ok := title.Value().(string)
-	if !ok {
-		return "", errors.New("unexpected type for title")
-	}
-	return str, nil
-}
-
-// GetArtist returns the currently playing track's artist.
-func (m *MPRIS) GetArtist() (string, error) {
-	v, err := m.getProperty("org.mpris.MediaPlayer2.Player.Metadata")
-	if err != nil {
-		return "", err
-	}
-
-	meta, ok := v.Value().(map[string]dbus.Variant)
-	if !ok {
-		return "", errors.New("unexpected type for Metadata")
-	}
-
-	artist, ok := meta["xesam:artist"]
-	if !ok {
-		return "", errors.New("no artist in metadata")
-	}
-	// xesam:artist is an array of strings (as)
-	arr, ok := artist.Value().([]string)
-	if !ok || len(arr) == 0 {
-		return "", errors.New("unexpected type for artist")
-	}
-	return arr[0], nil
-}
-
 // GetPosition returns playback position in microseconds.
 // Needed for syncing lyrics to timestamps.
 func (m *MPRIS) GetPosition() (int64, error) {
@@ -141,30 +151,4 @@ func (m *MPRIS) GetPosition() (int64, error) {
 		return 0, errors.New("unexpected type for Position")
 	}
 	return pos, nil
-}
-
-// GetDuration returns the track duration in seconds.
-// Needed for querying data in the lrclib API.
-func (m *MPRIS) GetDuration() (int64, error) {
-	v, err := m.getProperty("org.mpris.MediaPlayer2.Player.Metadata")
-	if err != nil {
-		return 0, err
-	}
-
-	meta, ok := v.Value().(map[string]dbus.Variant)
-	if !ok {
-		return 0, errors.New("unexpected type for Metadata")
-	}
-
-	title, ok := meta["mpris:length"]
-	if !ok {
-		return 0, errors.New("no duration in metadata")
-	}
-	result, ok := title.Value().(int64)
-	if !ok {
-		return 0, errors.New("unexpected type for duration")
-	}
-
-	seconds := int64(math.Floor(float64(result) / float64(DivFactorForLength)))
-	return seconds, nil
 }

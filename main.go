@@ -13,51 +13,32 @@ import (
 )
 
 func main() {
-	// Initialize read from dbus for playing media
 	conn, err := dbus.SessionBus()
 	if err != nil {
 		log.Fatalf("dbus connection failed: %v", err)
 	}
 	defer conn.Close()
 
-	// Get metadata from mpris package
 	player := mpris.NewMPRIS(conn)
-	title, artist, duration := getPlayingMediaMetadata(player)
 
-	// Get the Lyrics from lrclib package
-	lyrics, err := lrclib.GetLyrics(title, artist, duration)
+	meta, err := player.GetMetadata()
 	if err != nil {
-		log.Fatalf("dbus connection failed: %v", err)
+		log.Fatalf("could not get metadata: %v", err)
 	}
-	// fmt.Println(lyrics)
+	log.Printf("Currently playing song: %s", meta.Title)
+	log.Printf("Artist: %s", meta.Artist)
+	log.Printf("Duration: %d", meta.Duration)
+	log.Printf("TrackID: %s", meta.TrackID)
 
-	// Parse Lyrics to sync them
+	lyrics, err := lrclib.GetLyrics(meta.Title, meta.Artist, strconv.FormatInt(meta.Duration, 10))
+	if err != nil {
+		log.Fatalf("could not fetch lyrics: %v", err)
+	}
+
 	lyricsLines := lrc.LrcLyricsParser(lyrics)
 
-	p := tea.NewProgram(ui.NewModel(player, lyricsLines), tea.WithAltScreen())
+	p := tea.NewProgram(ui.NewModel(player, lyricsLines, meta), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		log.Fatalf("ui error: %v", err)
 	}
-}
-
-func getPlayingMediaMetadata(player *mpris.MPRIS) (title, artist, length string) {
-	mediaTitle, err := player.GetTitle()
-	if err != nil {
-		log.Fatalf("could not get title: %v", err)
-	}
-	log.Printf("Currently playing song: %s", mediaTitle)
-
-	mediaArtist, err := player.GetArtist()
-	if err != nil {
-		log.Fatalf("could not get artist: %v", err)
-	}
-	log.Printf("Artist: %s", mediaArtist)
-
-	mediaLength, err := player.GetDuration()
-	if err != nil {
-		log.Fatalf("could not get duration: %v", err)
-	}
-	log.Printf("Duration of currently playing song: %d", mediaLength)
-
-	return mediaTitle, mediaArtist, strconv.FormatInt(mediaLength, 10)
 }
